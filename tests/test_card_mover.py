@@ -6,9 +6,10 @@ import sqlite3
 
 from tom.adapters.board import SqliteBoardRepo, create_schema
 from tom.projection.events import Envelope
+from tom.schemas.board import BoardStatus
 from tom.schemas.trust import TrustPolicy
 from tom.scrummaster.authority import AUTHORITY_CEILING, Action
-from tom.scrummaster.cards import CardMover, pr_ref_from_subject
+from tom.scrummaster.cards import CardMover, direct_move_from_subject, pr_ref_from_subject
 from tom.scrummaster.pr_state import PrState, PrStateChecker
 from tom.trust import Admitted, admit
 
@@ -135,6 +136,51 @@ def test_every_emitted_action_is_within_the_ceiling() -> None:
     board = _board_with_card_linked_to("#6")
     mover = CardMover(board, _FakePrState(PrState.MERGED))
     moves = mover.handle(_merge_event("[pr-merged] #6", {}))
+    assert all(move.action in AUTHORITY_CEILING for move in moves)
+
+
+# --- direct lane moves (starting / blocked) ---------------------------------
+
+
+def test_direct_move_read_from_subject_only() -> None:
+    assert direct_move_from_subject("[starting] card:1") == (BoardStatus.IN_PROGRESS, "1")
+    assert direct_move_from_subject("[blocked] card:42") == (BoardStatus.BLOCKED, "42")
+    assert direct_move_from_subject("starting card:1") is None  # no tag
+    assert direct_move_from_subject("[starting] no card ref") is None
+
+
+def test_starting_moves_card_to_in_progress_without_gh() -> None:
+    board = _board_with_card_linked_to("#6")  # the single card has id 1
+    pr_state = _FakePrState(PrState.OPEN)
+    mover = CardMover(board, pr_state)
+
+    moves = mover.handle(_merge_event("[starting] card:1", {}))
+
+    assert len(moves) == 1
+    assert moves[0].to == BoardStatus.IN_PROGRESS
+    assert board.cards()[0]["status"] == "in_progress"
+    assert pr_state.calls == []  # a lane change needs no gh re-confirm
+
+
+def test_blocked_moves_card_to_blocked() -> None:
+    board = _board_with_card_linked_to("#6")
+    mover = CardMover(board, _FakePrState(PrState.OPEN))
+    moves = mover.handle(_merge_event("[blocked] card:1", {}))
+    assert moves[0].to == BoardStatus.BLOCKED
+    assert board.cards()[0]["status"] == "blocked"
+
+
+def test_direct_move_on_unknown_card_is_a_no_op() -> None:
+    board = _board_with_card_linked_to("#6")
+    mover = CardMover(board, _FakePrState(PrState.MERGED))
+    assert mover.handle(_merge_event("[starting] card:999", {})) == ()
+    assert board.cards()[0]["status"] == "in_review"  # untouched
+
+
+def test_direct_move_action_is_within_the_ceiling() -> None:
+    board = _board_with_card_linked_to("#6")
+    mover = CardMover(board, _FakePrState(PrState.MERGED))
+    moves = mover.handle(_merge_event("[blocked] card:1", {}))
     assert all(move.action in AUTHORITY_CEILING for move in moves)
 
 
