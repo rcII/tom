@@ -107,6 +107,30 @@ def test_no_move_when_no_card_links_the_pr() -> None:
     assert mover.handle(_merge_event("[pr-merged] #6", {})) == ()
 
 
+def test_pr_token_does_not_over_match_a_longer_number() -> None:
+    # A #6 merge must not sweep the card linked to #60 into done.
+    board = _board_with_card_linked_to("#60")
+    mover = CardMover(board, _FakePrState(PrState.MERGED))
+    assert mover.handle(_merge_event("[pr-merged] #6", {})) == ()
+    assert board.cards()[0]["status"] == "in_review"
+
+
+def test_pr_token_matches_inside_a_longer_subject_phrase() -> None:
+    board = _board_with_card_linked_to("#6")
+    mover = CardMover(board, _FakePrState(PrState.MERGED))
+    moves = mover.handle(_merge_event("[pr-merged] PR #6 landed, nice", {}))
+    assert len(moves) == 1
+    assert board.cards()[0]["status"] == "done"
+
+
+def test_unknown_pr_state_moves_nothing() -> None:
+    # gh couldn't confirm (degraded to UNKNOWN) — fail-closed, no move.
+    board = _board_with_card_linked_to("#6")
+    mover = CardMover(board, _FakePrState(PrState.UNKNOWN))
+    assert mover.handle(_merge_event("[pr-merged] #6", {})) == ()
+    assert board.cards()[0]["status"] == "in_review"
+
+
 def test_every_emitted_action_is_within_the_ceiling() -> None:
     board = _board_with_card_linked_to("#6")
     mover = CardMover(board, _FakePrState(PrState.MERGED))

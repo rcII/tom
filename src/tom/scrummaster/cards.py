@@ -25,6 +25,8 @@ from tom.scrummaster.pr_state import PrState, PrStateChecker
 
 _PR_MERGED_TAG = re.compile(r"\[pr-merged\]")
 _PR_NUMBER = re.compile(r"#(\d+)")
+# A whole PR token in a card link: #6 matches, but #60 / #600 / foo#6bar do not.
+_LINK_PR_TOKEN = re.compile(r"(?<!\w)#(\d+)(?!\w)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,4 +77,7 @@ class CardMover:
         link = card.get("link")
         if not isinstance(link, str):
             return False
-        return f"#{ref}" in link or link == ref
+        target = int(ref)
+        # Match whole PR tokens only, by number — so a #6 merge never moves the
+        # card linked to #60. (Repo-qualifying the token is a live-wiring concern.)
+        return any(int(number) == target for number in _LINK_PR_TOKEN.findall(link))
