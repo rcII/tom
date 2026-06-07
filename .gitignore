@@ -12,3 +12,7 @@ build/
 htmlcov/
 *.sqlite3
 .DS_Store
+
+# local tooling — not part of the project
+.mcp.json
+.claude/

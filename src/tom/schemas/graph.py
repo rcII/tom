@@ -8,10 +8,10 @@ validated subject of the event, never inferred from free-text body content.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class EdgeKind(str, Enum):
+class EdgeKind(StrEnum):
     MESSAGE = "message"
     REVIEW_OF = "review-of"
     DEPENDS_ON = "depends-on"
@@ -19,7 +19,7 @@ class EdgeKind(str, Enum):
     HANDS_OFF = "hands-off"
 
 
-class NodeKind(str, Enum):
+class NodeKind(StrEnum):
     SESSION = "session"
     SUBAGENT = "subagent"
 

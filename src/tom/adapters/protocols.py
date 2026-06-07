@@ -12,8 +12,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Protocol
 
-from tom.schemas.status import AgentStatus
 from tom.schemas.graph import InteractionEdge, Node
+from tom.schemas.status import AgentStatus
 
 
 class BoardRepo(Protocol):

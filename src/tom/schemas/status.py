@@ -8,16 +8,16 @@ projector and replaying the same log yields exactly this record again.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class State(str, Enum):
+class State(StrEnum):
     ACTIVE = "active"
     IDLE = "idle"
     BLOCKED = "blocked"
 
 
-class IdleBasis(str, Enum):
+class IdleBasis(StrEnum):
     MEASURED = "measured"
     INFERRED_NO_HEARTBEAT = "inferred-no-heartbeat"
 
