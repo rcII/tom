@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from types import MappingProxyType
 
 #: An immutable empty mapping, safe to share as a default body.
@@ -46,3 +47,36 @@ class Dispatch:
     requesting_session: str
     ts: str
     ref: str | None = None
+
+
+class SignalKind(StrEnum):
+    """What a status signal tells us about a session.
+
+    ``HEARTBEAT`` is pure liveness — "I am still here". The rest also assert
+    liveness (they are activity), and additionally move the session's state.
+    ``IDLE`` is a session reporting that it is parking — a *measured* idle, as
+    opposed to the idle the projector infers when a session simply goes quiet.
+    """
+
+    HEARTBEAT = "heartbeat"
+    STARTED = "started"
+    BLOCKED = "blocked"
+    UNBLOCKED = "unblocked"
+    IDLE = "idle"
+
+
+@dataclass(frozen=True, slots=True)
+class StatusSignal:
+    """One signal about a session's liveness and state, at a point in time.
+
+    ``task`` / ``pr`` / ``stage`` are carried forward by the projection when
+    present, so a later heartbeat doesn't erase what a session reported it was
+    working on.
+    """
+
+    session: str
+    ts: str
+    kind: SignalKind
+    task: str | None = None
+    pr: str | None = None
+    stage: str | None = None
