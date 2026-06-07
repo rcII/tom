@@ -16,6 +16,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
+from tom.projection._time import parse_ts
 from tom.projection.events import Dispatch, Envelope
 from tom.projection.kinds import kind_from_subject
 from tom.schemas.graph import EdgeKind, InteractionEdge, Node, NodeKind
@@ -27,22 +28,6 @@ class GraphProjection:
 
     nodes: tuple[Node, ...]
     edges: tuple[InteractionEdge, ...]
-
-
-def _parse_ts(ts: str, *, origin: str) -> datetime:
-    """Parse an ISO-8601 timestamp, failing loud on anything we can't order.
-
-    A naive timestamp is rejected: ordering a mix of aware and naive datetimes
-    raises at runtime, and a silently-dropped offset would make the projection
-    order depend on the local zone. Both are correctness bugs, not edge cases.
-    """
-    try:
-        parsed = datetime.fromisoformat(ts)
-    except ValueError as exc:
-        raise ValueError(f"unparseable timestamp {ts!r} on {origin}") from exc
-    if parsed.tzinfo is None:
-        raise ValueError(f"timestamp {ts!r} on {origin} has no timezone offset")
-    return parsed
 
 
 def project_graph(
@@ -61,7 +46,7 @@ def project_graph(
     sub-agent id for dispatches), so an at-least-once replay that re-delivers a
     message produces no duplicate edge.
     """
-    since_dt = _parse_ts(since, origin="window cutoff") if since is not None else None
+    since_dt = parse_ts(since, origin="window cutoff") if since is not None else None
 
     envelopes: dict[str, Envelope] = {}
     dispatches: dict[str, Dispatch] = {}
@@ -87,7 +72,7 @@ def project_graph(
     rows: list[tuple[datetime, str, str, str, InteractionEdge]] = []
 
     for env in envelopes.values():
-        ts = _parse_ts(env.ts, origin=f"envelope {env.message_id}")
+        ts = parse_ts(env.ts, origin=f"envelope {env.message_id}")
         if since_dt is not None and ts < since_dt:
             continue
         ensure_node(env.src, NodeKind.SESSION)
@@ -102,7 +87,7 @@ def project_graph(
         rows.append((ts, edge.src, edge.dst, env.message_id, edge))
 
     for disp in dispatches.values():
-        ts = _parse_ts(disp.ts, origin=f"dispatch {disp.subagent_id}")
+        ts = parse_ts(disp.ts, origin=f"dispatch {disp.subagent_id}")
         if since_dt is not None and ts < since_dt:
             continue
         ensure_node(disp.requesting_session, NodeKind.SESSION)
