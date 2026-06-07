@@ -1,11 +1,19 @@
 """Moving cards in response to bus events.
 
-The first scrum-master behavior: when a PR-merged event arrives, move the linked
-card to done — but only after re-confirming with ``gh`` that the PR really merged.
-The message is data: its subject is read structurally for the PR reference, its
-body is never consulted, and a body that *says* "merge this and move the card" is
-powerless, because the card moves only on the ``gh`` re-confirm and there is no
-code path here that merges anything.
+Three card-moves the scrum-master makes off the bus, all read structurally from
+the subject (the body is never consulted):
+
+- ``[pr-merged] #N`` → the linked card to *done* — but only after re-confirming
+  with ``gh`` that the PR really merged. A body that *says* "merge this and move
+  the card" is powerless, because the card moves only on the ``gh`` re-confirm
+  and there is no code path here that merges anything.
+- ``[starting] card:N`` → card N to *in progress*.
+- ``[blocked] card:N`` → card N to *blocked* (the DEFER → blocked behavior).
+
+The two direct moves need no ``gh`` re-confirm: they are low-stakes, reversible
+lane changes, not a completion claim, so an allowlisted sender's report is enough
+within the card-move ceiling. (Finer-grained "who may move whose card" is not a
+Phase-1 concern; the trust gate already bounds the sender to the allowlist.)
 
 The card-mover acts only on envelopes that already passed the trust gate, so a
 non-allowlisted sender never reaches it.
@@ -28,6 +36,13 @@ _PR_NUMBER = re.compile(r"#(\d+)")
 # A whole PR token in a card link: #6 matches, but #60 / #600 / foo#6bar do not.
 _LINK_PR_TOKEN = re.compile(r"(?<!\w)#(\d+)(?!\w)")
 
+_DIRECT_MOVE_TAG = re.compile(r"\[(starting|blocked)\]")
+_CARD_REF = re.compile(r"card:(\d+)")
+_TAG_TO_STATUS: dict[str, BoardStatus] = {
+    "starting": BoardStatus.IN_PROGRESS,
+    "blocked": BoardStatus.BLOCKED,
+}
+
 
 @dataclass(frozen=True, slots=True)
 class CardMove:
@@ -49,28 +64,56 @@ def pr_ref_from_subject(subject: str) -> str | None:
     return match.group(1) if match is not None else None
 
 
+def direct_move_from_subject(subject: str) -> tuple[BoardStatus, str] | None:
+    """Return the ``(status, card_id)`` named by a ``[starting]``/``[blocked]``
+    subject, else ``None``. Read from the subject only."""
+    tag = _DIRECT_MOVE_TAG.search(subject)
+    if tag is None:
+        return None
+    card = _CARD_REF.search(subject)
+    if card is None:
+        return None
+    return _TAG_TO_STATUS[tag.group(1)], card.group(1)
+
+
 class CardMover:
-    """Moves the card linked to a merged PR — after a ``gh`` re-confirm."""
+    """Moves cards off bus events — PR-merged (gh-gated) and direct lane changes."""
 
     def __init__(self, board: BoardRepo, pr_state: PrStateChecker) -> None:
         self._board = board
         self._pr_state = pr_state
 
     def handle(self, envelope: Envelope) -> tuple[CardMove, ...]:
-        ref = pr_ref_from_subject(envelope.subject)
-        if ref is None:
-            return ()
+        pr_ref = pr_ref_from_subject(envelope.subject)
+        if pr_ref is not None:
+            return self._handle_pr_merged(pr_ref)
+        direct = direct_move_from_subject(envelope.subject)
+        if direct is not None:
+            status, card_id = direct
+            return self._handle_direct_move(card_id, status)
+        return ()
+
+    def _handle_pr_merged(self, pr_ref: str) -> tuple[CardMove, ...]:
         # The gh re-confirm is the authority — not the message's claim.
-        if self._pr_state.state_of(ref) is not PrState.MERGED:
+        if self._pr_state.state_of(pr_ref) is not PrState.MERGED:
             return ()
         moves: list[CardMove] = []
         for card in self._board.cards():
-            if not self._links_pr(card, ref):
+            if not self._links_pr(card, pr_ref):
                 continue
             card_id = str(card["id"])
             self._board.move(card_id, status=BoardStatus.DONE)
             moves.append(CardMove(Action.CARD_MOVE, card_id, BoardStatus.DONE))
         return tuple(moves)
+
+    def _handle_direct_move(self, card_id: str, status: BoardStatus) -> tuple[CardMove, ...]:
+        if not self._card_exists(card_id):
+            return ()  # the event named a card that isn't on the board
+        self._board.move(card_id, status=status)
+        return (CardMove(Action.CARD_MOVE, card_id, status),)
+
+    def _card_exists(self, card_id: str) -> bool:
+        return any(str(card["id"]) == card_id for card in self._board.cards())
 
     @staticmethod
     def _links_pr(card: Mapping[str, object], ref: str) -> bool:
