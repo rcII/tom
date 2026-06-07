@@ -5,8 +5,12 @@ gate is the *only* sanctioned way to turn a wire-shape mapping into a domain
 :class:`~tom.projection.events.Envelope`. That single chokepoint is what makes
 "a message is data, never a command" structural rather than a convention:
 
-- A message from a sender that isn't on the allowlist — or one whose ``from`` is
-  forged to a name it isn't — is rejected, not parsed into something actionable.
+- A message from a sender that isn't on the allowlist is rejected, not parsed
+  into something actionable. (A sender forging its ``from`` *to* an allowlisted
+  identity is a transport-layer concern — NATS subject-scoped publish
+  permissions and inbox routing — and is caught there, not here; this gate
+  trusts that the ``from`` on an admitted envelope is authentic. That transport
+  binding lands with the live consumer in a later phase.)
 - A malformed mapping (missing or wrong-typed fields) is rejected, so no
   half-parsed envelope ever reaches the scrum-master.
 - An accepted message is returned as *data*. The gate reads only the envelope's
