@@ -53,7 +53,13 @@ class GhPrStateChecker:
         self._run = run
 
     def state_of(self, pr_ref: str) -> PrState:
-        output = self._run(["gh", "pr", "view", pr_ref, "--json", "state"])
+        try:
+            output = self._run(["gh", "pr", "view", pr_ref, "--json", "state"])
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # PR-not-found, auth, rate-limit, network, or gh missing — degrade to
+            # UNKNOWN like a malformed reply does. UNKNOWN is fail-closed: the
+            # card-mover moves nothing unless gh affirmatively says MERGED.
+            return PrState.UNKNOWN
         try:
             payload = json.loads(output)
         except json.JSONDecodeError:
