@@ -1,52 +1,69 @@
-"""The tmux pane driver builds the right commands and parses panes."""
+"""The tmux pane driver, against real-shaped tmux output."""
 
 from __future__ import annotations
 
-from tom.wake.pane import Pane, PaneDriver, TmuxPaneDriver
+from tom.wake.pane import PaneDriver, TmuxPaneDriver
 
 
 class _FakeTmux:
-    def __init__(self, output: str = "") -> None:
-        self.output = output
+    """Returns scripted stdout per command, recording the argv of each call."""
+
+    def __init__(self, outputs: dict[str, str] | None = None) -> None:
+        # keyed by the tmux subcommand (argv[1]); default empty stdout
+        self._outputs = outputs or {}
         self.calls: list[list[str]] = []
 
     def __call__(self, argv: list[str]) -> str:
         self.calls.append(argv)
-        return self.output
+        return self._outputs.get(argv[1], "")
 
 
 def test_satisfies_pane_driver_protocol() -> None:
     driver: PaneDriver = TmuxPaneDriver(run=_FakeTmux())
-    assert driver.panes() == ()
+    assert driver.command_of("7:1") is None  # empty output → not live
 
 
-def test_parses_panes_from_tmux_output() -> None:
-    tmux = _FakeTmux("%1\t1\tclaude\ttpm\n%2\t0\tnode\tcatalyst\n")
-    panes = TmuxPaneDriver(run=tmux).panes()
-    assert panes == (
-        Pane(id="%1", active=True, command="claude", title="tpm"),
-        Pane(id="%2", active=False, command="node", title="catalyst"),
-    )
-    assert tmux.calls[0][:3] == ["tmux", "list-panes", "-a"]
-
-
-def test_blank_lines_are_skipped() -> None:
-    tmux = _FakeTmux("%1\t1\tclaude\ttpm\n\n")
-    assert len(TmuxPaneDriver(run=tmux).panes()) == 1
-
-
-def test_capture_uses_the_pane_id() -> None:
-    tmux = _FakeTmux("some screen content")
-    content = TmuxPaneDriver(run=tmux).capture("%3")
-    assert content == "some screen content"
-    assert tmux.calls[0] == ["tmux", "capture-pane", "-p", "-t", "%3"]
-
-
-def test_send_line_submits_the_text_with_carriage_return() -> None:
-    tmux = _FakeTmux()
-    TmuxPaneDriver(run=tmux).send_line("%3", "you have pending messages")
-    # The text is sent followed by C-m (not the Enter keyname), so the idle
-    # session reliably submits the turn instead of inserting a newline.
+def test_command_of_returns_the_running_command() -> None:
+    # Real `tmux display-message -p '#{pane_current_command}'` prints the command
+    # plus a trailing newline.
+    tmux = _FakeTmux({"display-message": "claude\n"})
+    driver = TmuxPaneDriver(run=tmux)
+    assert driver.command_of("7:1") == "claude"
     assert tmux.calls[0] == [
-        "tmux", "send-keys", "-t", "%3", "--", "you have pending messages", "C-m",
+        "tmux", "display-message", "-t", "7:1", "-p", "#{pane_current_command}",
+    ]
+
+
+def test_command_of_a_shell_pane() -> None:
+    # 7:5 on the live rig is a zsh pane — the relay must see it's not claude.
+    driver = TmuxPaneDriver(run=_FakeTmux({"display-message": "zsh\n"}))
+    assert driver.command_of("7:5") == "zsh"
+
+
+def test_command_of_dead_target_is_none() -> None:
+    # tmux prints an empty line for a target that doesn't resolve.
+    driver = TmuxPaneDriver(run=_FakeTmux({"display-message": "\n"}))
+    assert driver.command_of("99:99") is None
+
+
+def test_command_of_when_tmux_is_missing_is_none() -> None:
+    def absent(argv: list[str]) -> str:
+        raise FileNotFoundError("tmux")
+
+    assert TmuxPaneDriver(run=absent).command_of("7:1") is None
+
+
+def test_capture_targets_the_pane() -> None:
+    tmux = _FakeTmux({"capture-pane": "screen content"})
+    assert TmuxPaneDriver(run=tmux).capture("7:1") == "screen content"
+    assert tmux.calls[0] == ["tmux", "capture-pane", "-p", "-t", "7:1"]
+
+
+def test_send_line_sends_literal_text_then_a_separate_carriage_return() -> None:
+    tmux = _FakeTmux()
+    TmuxPaneDriver(run=tmux).send_line("7:1", "process your inbox")
+    # Two calls: literal text, then C-m on its own — never coalesced into one burst.
+    assert tmux.calls == [
+        ["tmux", "send-keys", "-t", "7:1", "-l", "--", "process your inbox"],
+        ["tmux", "send-keys", "-t", "7:1", "C-m"],
     ]
