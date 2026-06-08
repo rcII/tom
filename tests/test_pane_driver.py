@@ -42,10 +42,11 @@ def test_capture_uses_the_pane_id() -> None:
     assert tmux.calls[0] == ["tmux", "capture-pane", "-p", "-t", "%3"]
 
 
-def test_send_line_submits_the_text() -> None:
+def test_send_line_submits_the_text_with_carriage_return() -> None:
     tmux = _FakeTmux()
     TmuxPaneDriver(run=tmux).send_line("%3", "you have pending messages")
-    # The text is sent followed by Enter, so the idle session starts a turn.
+    # The text is sent followed by C-m (not the Enter keyname), so the idle
+    # session reliably submits the turn instead of inserting a newline.
     assert tmux.calls[0] == [
-        "tmux", "send-keys", "-t", "%3", "--", "you have pending messages", "Enter",
+        "tmux", "send-keys", "-t", "%3", "--", "you have pending messages", "C-m",
     ]

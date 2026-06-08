@@ -23,6 +23,11 @@ CommandRunner = Callable[[list[str]], str]
 # tmux list-panes format → the fields we parse, tab-separated and in this order.
 _PANE_FORMAT = "#{pane_id}\t#{pane_active}\t#{pane_current_command}\t#{pane_title}"
 
+# The key that submits a line to a Claude pane. C-m (carriage return), not the
+# `Enter` keyname — in the Claude TUI, Enter can insert a newline rather than
+# submit, while C-m reliably submits the turn.
+_SUBMIT_KEY = "C-m"
+
 
 @dataclass(frozen=True, slots=True)
 class Pane:
@@ -70,5 +75,5 @@ class TmuxPaneDriver:
         return self._run(["tmux", "capture-pane", "-p", "-t", pane_id])
 
     def send_line(self, pane_id: str, text: str) -> None:
-        # Send the text and submit it (Enter), so an idle session starts a turn.
-        self._run(["tmux", "send-keys", "-t", pane_id, "--", text, "Enter"])
+        # Send the text and submit it (C-m), so an idle session starts a turn.
+        self._run(["tmux", "send-keys", "-t", pane_id, "--", text, _SUBMIT_KEY])
