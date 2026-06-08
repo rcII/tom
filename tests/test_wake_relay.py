@@ -21,7 +21,7 @@ def _state(
 ) -> SessionState:
     return SessionState(
         session=session,
-        pane_id=f"{session}:0",
+        target=f"7:{session}",
         idle=idle,
         pending=pending,
         last_wake_ts=last_wake_ts,
@@ -30,7 +30,7 @@ def _state(
 
 def test_idle_session_with_pending_is_woken() -> None:
     (decision,) = decide_wakes([_state("catalyst")], now=NOW, debounce=DEBOUNCE)
-    assert decision == WakeDecision(session="catalyst", pane_id="catalyst:0")
+    assert decision == WakeDecision(session="catalyst", target="7:catalyst")
 
 
 def test_busy_session_is_never_woken() -> None:

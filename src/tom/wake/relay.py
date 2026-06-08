@@ -27,7 +27,9 @@ class SessionState:
     """What the relay knows about one session right now."""
 
     session: str
-    pane_id: str
+    #: The configured tmux target (session:window or session:window.pane) — a
+    #: string the relay resolves to a specific pane, NOT a %N pane id.
+    target: str
     #: True when the pane is sitting idle (at the prompt), not mid-turn.
     idle: bool
     #: Count of delivered-but-unsurfaced events waiting for this session.
@@ -39,7 +41,7 @@ class SessionState:
 @dataclass(frozen=True, slots=True)
 class WakeDecision:
     session: str
-    pane_id: str
+    target: str
 
 
 def decide_wakes(
@@ -62,5 +64,5 @@ def decide_wakes(
             )
             if since_wake <= debounce:
                 continue  # woken recently — don't storm it
-        decisions.append(WakeDecision(session=state.session, pane_id=state.pane_id))
+        decisions.append(WakeDecision(session=state.session, target=state.target))
     return tuple(sorted(decisions, key=lambda decision: decision.session))
