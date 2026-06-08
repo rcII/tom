@@ -1,0 +1,54 @@
+# systemd --user unit for the idle-session wake relay.
+#
+# Install (only AFTER the wake-relay stack is merged to main — enable from a
+# main checkout, not an in-review branch, so the daemon never runs mutable code):
+#   git -C ~/code/tom checkout main && git -C ~/code/tom pull
+#   cp deploy/tom-wake.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now tom-wake.service
+#   journalctl --user -u tom-wake -f      # watch it
+#
+# The team map and tunables live here as Environment= (the package holds no host
+# values). The pane addresses are tmux session:window TARGETS — confirm them and
+# the uv path for this host before enabling (tmux list-panes -a).
+#
+# A target whose WINDOW holds more than one claude pane (e.g. a session sharing
+# its window with a live UAT pane) is REFUSED and logged, never guessed at. To
+# wake such a session, give the fully-qualified session:window.pane (e.g.
+# options-analyst=7:2.0 instead of 7:2). Single-pane windows need only the window.
+
+[Unit]
+Description=tom idle-session wake relay
+After=default.target
+# Cap restarts: a build_relay crash on bad config must not restart-storm —
+# 5 starts in 5 minutes and systemd gives up until manually reset.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+
+# session -> tmux session:window target, and the inbox root the bridge writes to.
+Environment=TOM_WAKE_PANES=tpm=7:1,catalyst=7:4,options-analyst=7:2,viz=7:3,tom=7:7
+Environment=TOM_WAKE_INBOX_ROOT=%h/.claude/inter-session
+
+# Where the per-session watermark is persisted (so a restart neither replays the
+# inbox backlog nor forgets the debounce).
+Environment=TOM_WAKE_STATE_FILE=%h/.local/state/tom-wake/watermarks.json
+
+# What a woken pane receives — it only needs to start a turn; the actual messages
+# surface via the session's channel at that turn boundary.
+Environment=TOM_WAKE_MESSAGE=You have pending inter-session messages. Read and process your inbox now.
+
+# Don't re-wake the same session inside this window; how often to sweep; what
+# marks a pane as busy (so we never interrupt active work — add variants here).
+Environment=TOM_WAKE_DEBOUNCE_SECONDS=120
+Environment=TOM_WAKE_INTERVAL_SECONDS=30
+Environment=TOM_WAKE_BUSY_MARKERS=esc to interrupt
+
+ExecStart=%h/.local/bin/uv run --project %h/code/tom python -m tom.wake
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
