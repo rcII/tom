@@ -32,7 +32,9 @@ class _Recorder:
 @pytest.fixture
 def server() -> Iterator[tuple[BridgeServer, _Recorder]]:
     recorder = _Recorder()
-    config = BridgeConfig(host="127.0.0.1", port=0, path=_PATH, secret=_SECRET)
+    config = BridgeConfig(
+        host="127.0.0.1", port=0, path=_PATH, secret=_SECRET, max_body_bytes=4096
+    )
     srv = BridgeServer(config, recorder)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
@@ -79,4 +81,28 @@ def test_wrong_secret_is_rejected(server: tuple[BridgeServer, _Recorder]) -> Non
 def test_wrong_path_is_404(server: tuple[BridgeServer, _Recorder]) -> None:
     srv, recorder = server
     assert _post(srv, "/elsewhere", _update(), _SECRET) == 404
+    assert recorder.calls == []
+
+
+def test_oversized_body_is_413_and_never_publishes(
+    server: tuple[BridgeServer, _Recorder],
+) -> None:
+    srv, recorder = server
+    # A body past the configured cap is rejected on its declared size, unread.
+    oversized = b'{"update_id": 1, "message": {"text": "' + b"x" * 5000 + b'"}}'
+    assert _post(srv, _PATH, oversized, _SECRET) == 413
+    assert recorder.calls == []
+
+
+def test_get_request_does_not_publish(server: tuple[BridgeServer, _Recorder]) -> None:
+    srv, recorder = server
+    host, port = srv.server_address[0], srv.server_address[1]
+    conn = HTTPConnection(str(host), int(port), timeout=5)
+    try:
+        conn.request("GET", _PATH, headers={"X-Telegram-Bot-Api-Secret-Token": _SECRET})
+        status = conn.getresponse().status
+    finally:
+        conn.close()
+    # Only POST is handled; a GET can never publish an event.
+    assert status != 200
     assert recorder.calls == []

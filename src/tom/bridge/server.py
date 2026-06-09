@@ -33,6 +33,10 @@ _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 8788
 _DEFAULT_PATH = "/telegram/webhook"
 _SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
+# A Telegram update is a few KB; cap the body so a hostile caller can't exhaust
+# memory by declaring a huge Content-Length on the public-facing endpoint.
+_MAX_BODY_ENV = "TOM_BRIDGE_MAX_BODY_BYTES"
+_DEFAULT_MAX_BODY_BYTES = 65536
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +47,7 @@ class BridgeConfig:
     port: int
     path: str
     secret: str
+    max_body_bytes: int = _DEFAULT_MAX_BODY_BYTES
 
 
 class BridgeServer(ThreadingHTTPServer):
@@ -66,7 +71,13 @@ class _WebhookHandler(BaseHTTPRequestHandler):
             self._respond(404, "not found")
             return
 
-        body = self.rfile.read(self._content_length())
+        length = self._content_length()
+        if length > server.config.max_body_bytes:
+            # Reject on the declared size before reading a byte of it.
+            self._respond(413, "payload too large")
+            return
+
+        body = self.rfile.read(length)
         secret = self.headers.get(_SECRET_HEADER)
         ts = datetime.now(UTC).isoformat()
         outcome = handle_webhook(
@@ -123,6 +134,7 @@ def bridge_config_from_env() -> BridgeConfig:
         port=_port_from_env(),
         path=os.environ.get(_PATH_ENV, _DEFAULT_PATH),
         secret=require_env("TELEGRAM_WEBHOOK_SECRET"),
+        max_body_bytes=_max_body_from_env(),
     )
 
 
@@ -137,3 +149,16 @@ def _port_from_env() -> int:
     if not (1 <= port <= 65535):
         raise ValueError(f"{_PORT_ENV} must be in 1..65535, got {port}")
     return port
+
+
+def _max_body_from_env() -> int:
+    raw = os.environ.get(_MAX_BODY_ENV)
+    if raw is None:
+        return _DEFAULT_MAX_BODY_BYTES
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{_MAX_BODY_ENV} must be an integer, got {raw!r}") from exc
+    if value <= 0:
+        raise ValueError(f"{_MAX_BODY_ENV} must be positive, got {value}")
+    return value
