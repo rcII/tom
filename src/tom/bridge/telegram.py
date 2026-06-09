@@ -109,7 +109,12 @@ def _salient_payload(inner: Mapping[str, object]) -> dict[str, object]:
     """
     payload: dict[str, object] = {}
 
+    # The chat sits directly on a message, but a callback_query nests it under its
+    # originating `message` — fall back to there so the chat_id needed to route a
+    # reply isn't lost on a button press.
     chat = _as_str_map(inner.get("chat"))
+    if "id" not in chat:
+        chat = _as_str_map(_as_str_map(inner.get("message")).get("chat"))
     if "id" in chat:
         payload["chat_id"] = chat["id"]
 

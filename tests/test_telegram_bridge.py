@@ -62,6 +62,22 @@ def test_callback_query_carries_its_data() -> None:
     assert event.payload["from_id"] == 2
 
 
+def test_callback_query_lifts_chat_id_from_the_nested_message() -> None:
+    # Telegram nests a callback's chat under its originating message; the chat_id
+    # needed to route a reply must survive the mapping.
+    update = {
+        "update_id": 10,
+        "callback_query": {
+            "from": {"id": 2},
+            "data": "deny:card-17",
+            "message": {"message_id": 3, "chat": {"id": 555}},
+        },
+    }
+    event = channel_event_from_update(update, ts=_TS)
+    assert event.payload["chat_id"] == 555
+    assert event.payload["data"] == "deny:card-17"
+
+
 def test_unknown_update_type_is_forwarded_not_dropped() -> None:
     # A type we don't model must still surface on the bus — visible, not lost.
     update = {"update_id": 3, "poll_answer": {"option_ids": [1]}}
