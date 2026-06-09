@@ -37,14 +37,17 @@ Environment=TOM_WAKE_INBOX_ROOT=%h/.claude/inter-session
 Environment=TOM_WAKE_STATE_FILE=%h/.local/state/tom-wake/watermarks.json
 
 # What a woken pane receives — it only needs to start a turn; the actual messages
-# surface via the session's channel at that turn boundary.
-Environment=TOM_WAKE_MESSAGE=You have pending inter-session messages. Read and process your inbox now.
+# surface via the session's channel at that turn boundary. Quote any value with
+# spaces: systemd splits an unquoted Environment= on whitespace and would
+# truncate this to "You".
+Environment="TOM_WAKE_MESSAGE=You have pending inter-session messages. Read and process your inbox now."
 
 # Don't re-wake the same session inside this window; how often to sweep; what
 # marks a pane as busy (so we never interrupt active work — add variants here).
+# Quoted for the same reason — unquoted, systemd would truncate it to "esc".
 Environment=TOM_WAKE_DEBOUNCE_SECONDS=120
 Environment=TOM_WAKE_INTERVAL_SECONDS=30
-Environment=TOM_WAKE_BUSY_MARKERS=esc to interrupt
+Environment="TOM_WAKE_BUSY_MARKERS=esc to interrupt"
 
 ExecStart=%h/.local/bin/uv run --project %h/code/tom python -m tom.wake
 Restart=always
