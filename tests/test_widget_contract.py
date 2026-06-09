@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from tom.projection.graph import GraphProjection
 from tom.projection.widget import delta_between, snapshot_from_projection
 from tom.schemas.graph import EdgeKind, InteractionEdge, Node, NodeKind
@@ -139,16 +141,20 @@ def test_delta_handles_added_and_removed_nodes() -> None:
 
 def test_delta_adds_and_removes_edges_by_identity() -> None:
     edge = InteractionEdge(src="a", dst="b", kind=EdgeKind.DEPENDS_ON, ts=_TS)
-    prev = snapshot_from_projection([], _graph(), seq=1, generated_ts=_TS)
-    curr = snapshot_from_projection([], _graph(edges=(edge,)), seq=2, generated_ts=_TS)
+    widget_edge = WidgetEdge("a", "b", EdgeKind.DEPENDS_ON)
 
-    added = delta_between(prev, curr).deltas
-    assert added == (
-        StatusDelta(op=DeltaOp.EDGE_ADD, edge=WidgetEdge("a", "b", EdgeKind.DEPENDS_ON)),
+    # forward add: the edge appears between seq 1 and 2
+    none_snap = snapshot_from_projection([], _graph(), seq=1, generated_ts=_TS)
+    edge_snap = snapshot_from_projection([], _graph(edges=(edge,)), seq=2, generated_ts=_TS)
+    assert delta_between(none_snap, edge_snap).deltas == (
+        StatusDelta(op=DeltaOp.EDGE_ADD, edge=widget_edge),
     )
-    removed = delta_between(curr, prev).deltas
-    assert removed == (
-        StatusDelta(op=DeltaOp.EDGE_REMOVE, edge=WidgetEdge("a", "b", EdgeKind.DEPENDS_ON)),
+
+    # forward remove: the edge is gone by seq 3 (diff stays monotone, never reversed)
+    edge_again = snapshot_from_projection([], _graph(edges=(edge,)), seq=2, generated_ts=_TS)
+    gone_snap = snapshot_from_projection([], _graph(), seq=3, generated_ts=_TS)
+    assert delta_between(edge_again, gone_snap).deltas == (
+        StatusDelta(op=DeltaOp.EDGE_REMOVE, edge=widget_edge),
     )
 
 
@@ -184,3 +190,19 @@ def test_delta_carries_the_seq_advance_even_when_empty() -> None:
     batch = delta_between(snap, later)
     assert batch.deltas == ()
     assert (batch.from_seq, batch.to_seq) == (5, 6)
+
+
+def test_a_backwards_delta_fails_loud() -> None:
+    # seq is monotone; a delta from a newer snapshot to an older one is a producer
+    # bug that would corrupt viz, so it must raise, not silently emit.
+    newer = snapshot_from_projection([], _graph(), seq=9, generated_ts=_TS)
+    older = StatusSnapshot(seq=4, generated_ts=_TS)
+    with pytest.raises(ValueError, match="backwards"):
+        delta_between(newer, older)
+
+
+def test_a_same_seq_delta_is_allowed() -> None:
+    # Equal seq is a no-op advance, not backwards — it must not raise.
+    snap = snapshot_from_projection([], _graph(), seq=5, generated_ts=_TS)
+    batch = delta_between(snap, StatusSnapshot(seq=5, generated_ts=_TS))
+    assert (batch.from_seq, batch.to_seq) == (5, 5)

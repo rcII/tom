@@ -75,7 +75,16 @@ def delta_between(prev: StatusSnapshot, curr: StatusSnapshot) -> DeltaBatch:
     Upserts a node whose fields changed (or that is new), removes one that's
     gone, and adds/removes edges by identity. Ops are emitted in a deterministic
     order (nodes before edges, each sorted by id/key) so the batch is stable.
+
+    Fails loud if ``curr`` is not at or ahead of ``prev``: ``seq`` is monotone, so
+    a backwards delta is a producer bug that would hand viz a batch claiming to
+    advance to an older state — corrupting it rather than letting it detect a gap.
     """
+    if curr.seq < prev.seq:
+        raise ValueError(
+            f"delta would run backwards: from seq {prev.seq} to {curr.seq}"
+        )
+
     deltas: list[StatusDelta] = []
 
     prev_nodes = {node.id: node for node in prev.nodes}
