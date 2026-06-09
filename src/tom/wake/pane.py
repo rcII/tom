@@ -12,8 +12,10 @@ lists every pane in a target's window (so the relay can refuse an ambiguous one)
 and ``pane_id_of`` returns the exact ``%N`` id a target resolves to. ``capture``
 and ``send_line`` then act on that ``%N`` id, which names exactly one pane.
 
-``send_line`` sends literal text then a separate ``C-m`` — a carriage return in
-the same input burst can coalesce into a newline and leave the line unsent.
+``send_line`` sends literal text then a separate ``Enter`` keystroke — kept
+separate so the submit can't coalesce into the typed text, and ``Enter`` rather
+than ``C-m`` because the composer runs in vim INSERT mode where a raw carriage
+return inserts a newline instead of submitting.
 """
 
 from __future__ import annotations
@@ -26,9 +28,12 @@ from typing import Protocol
 #: Runs an argv and returns its stdout. The seam that keeps tmux testable.
 CommandRunner = Callable[[list[str]], str]
 
-# The key that submits a line to a Claude pane — C-m (carriage return), not the
-# `Enter` keyname, which the Claude TUI can treat as a newline.
-_SUBMIT_KEY = "C-m"
+# The key that submits a line to a Claude pane. The `Enter` keyname, sent on its
+# own after the text. C-m (a raw carriage return) does NOT submit when the
+# composer is in vim INSERT mode — it inserts a newline and the line sits unsent,
+# verified live. `Enter` submits in that mode; Escape-then-Enter is avoided
+# because Escape can clear the composer in a non-vim pane.
+_SUBMIT_KEY = "Enter"
 _LIST_FORMAT = "#{pane_id}\t#{pane_current_command}"
 
 
@@ -93,7 +98,8 @@ class TmuxPaneDriver:
         return self._run(["tmux", "capture-pane", "-p", "-t", pane_id])
 
     def send_line(self, pane_id: str, text: str) -> None:
-        # Literal text first, then a separate C-m — never both in one burst, or
-        # the carriage return can coalesce into a newline and the line sits unsent.
+        # Literal text first, then a separate Enter — never both in one burst (so
+        # the submit can't coalesce into the text), and Enter rather than C-m so
+        # the composer in vim INSERT mode actually fires the turn.
         self._run(["tmux", "send-keys", "-t", pane_id, "-l", "--", text])
         self._run(["tmux", "send-keys", "-t", pane_id, _SUBMIT_KEY])
