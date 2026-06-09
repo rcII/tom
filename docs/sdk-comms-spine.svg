@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 880" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="fwd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2f6db0"/>
+    </marker>
+    <marker id="ret" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d98e00"/>
+    </marker>
+    <marker id="loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3f8f4f"/>
+    </marker>
+    <marker id="fall" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8a8f98"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1320" height="880" fill="#ffffff"/>
+
+  <!-- title -->
+  <text x="660" y="42" text-anchor="middle" font-size="27" font-weight="700" fill="#1d2733">TOM SDK Comms-System &#8212; the event spine</text>
+  <text x="660" y="70" text-anchor="middle" font-size="14.5" fill="#5b6672">Interactive tmux panes are KEPT. The SDK is used for its hook EVENTS, layered on &#8212; hooks &#8594; NATS &#8594; fan-out &#8594; back into the pane.</text>
+
+  <!-- ============ PANES (left) ============ -->
+  <rect x="40" y="120" width="330" height="448" rx="14" fill="#f4f7fb" stroke="#4169a8" stroke-width="2"/>
+  <text x="205" y="147" text-anchor="middle" font-size="16" font-weight="700" fill="#284c84">Interactive tmux panes (KEPT)</text>
+
+  <rect x="70" y="166" width="270" height="64" rx="10" fill="#ffffff" stroke="#4169a8" stroke-width="1.6"/>
+  <text x="205" y="194" text-anchor="middle" font-size="15" font-weight="700" fill="#1d2733">agent pane</text>
+  <text x="205" y="214" text-anchor="middle" font-size="11.5" fill="#5b6672">human-drivable: phone &#183; watch &#183; type-to-steer</text>
+
+  <rect x="70" y="252" width="270" height="300" rx="10" fill="#eaf2fb" stroke="#4169a8" stroke-width="1.6"/>
+  <text x="205" y="278" text-anchor="middle" font-size="15" font-weight="700" fill="#284c84">Claude Code hooks</text>
+  <g font-size="12.5" fill="#22303f">
+    <text x="90" y="306">SessionStart &#183; SessionEnd</text>
+    <text x="90" y="338">UserPromptSubmit <tspan fill="#d98e00" font-weight="700">&#8594; R4 inject</tspan></text>
+    <text x="90" y="370">PreToolUse <tspan fill="#c0453f" font-weight="700">&#8594; R1b permission</tspan></text>
+    <text x="90" y="402">PostToolUse</text>
+    <text x="90" y="434">Notification <tspan fill="#5b6672">&#8594; silent-block catcher</tspan></text>
+    <text x="90" y="466">Stop <tspan fill="#3f8f4f" font-weight="700">&#8594; R7 drive-loop / idle</tspan></text>
+  </g>
+  <text x="205" y="522" text-anchor="middle" font-size="11" fill="#7a828c" font-style="italic">one typed SessionEvent per firing</text>
+
+  <!-- ============ NATS (center hub) ============ -->
+  <rect x="470" y="300" width="180" height="150" rx="12" fill="#fff4e0" stroke="#d98e00" stroke-width="2.4"/>
+  <text x="560" y="350" text-anchor="middle" font-size="20" font-weight="700" fill="#9a6500">NATS</text>
+  <text x="560" y="374" text-anchor="middle" font-size="13" fill="#9a6500">JetStream</text>
+  <text x="560" y="396" text-anchor="middle" font-size="13" font-weight="700" fill="#9a6500">event spine</text>
+  <text x="560" y="424" text-anchor="middle" font-size="10.5" fill="#a9802f">durable &#183; replay &#183; first-party</text>
+
+  <!-- ============ RIGHT COLUMN (fan-out) ============ -->
+  <!-- CCH -->
+  <rect x="760" y="120" width="470" height="86" rx="10" fill="#eef7ee" stroke="#3f8f4f" stroke-width="1.8"/>
+  <text x="782" y="150" font-size="15" font-weight="700" fill="#2c6b3a">CCH memory</text>
+  <text x="782" y="174" font-size="12" fill="#3d4f44">durable store: Qdrant + FalkorDB &#183; write on event (R5)</text>
+  <text x="782" y="193" font-size="12" fill="#3d4f44">recall with a TTL check (R10)</text>
+
+  <!-- Console -->
+  <rect x="760" y="226" width="470" height="86" rx="10" fill="#f0eefb" stroke="#6a4fb3" stroke-width="1.8"/>
+  <text x="782" y="256" font-size="15" font-weight="700" fill="#54399c">Live console + status widget</text>
+  <text x="782" y="280" font-size="12" fill="#463a5e">chat timeline + graph-node status (HR-A/HR-B, R2/R3)</text>
+  <text x="782" y="299" font-size="12" fill="#463a5e">subscribe-only &#183; reflects the model, never writes it</text>
+
+  <!-- Escalation consumer -->
+  <rect x="760" y="332" width="470" height="128" rx="10" fill="#fdeeee" stroke="#c0453f" stroke-width="1.8"/>
+  <text x="782" y="362" font-size="15" font-weight="700" fill="#a23932">Escalation consumer &#8212; exposed to TPM + EM</text>
+  <text x="782" y="386" font-size="12" fill="#5a3c3a">permission / interactive prompts arrive as EVENTS,</text>
+  <text x="782" y="405" font-size="12" fill="#5a3c3a">resolved by escalation policy (TPM procedural / EM sovereign)</text>
+  <text x="782" y="428" font-size="12.5" font-weight="700" fill="#a23932">NO allowlist &#183; an agent can never self-approve (R1b / EM 1611)</text>
+  <text x="782" y="449" font-size="12" fill="#5a3c3a">&#8594; raises a card in the Needs-EM decision queue</text>
+
+  <!-- Telegram -->
+  <rect x="760" y="480" width="470" height="74" rx="10" fill="#e9f3fb" stroke="#2b80c0" stroke-width="1.8"/>
+  <text x="782" y="510" font-size="15" font-weight="700" fill="#1f6498">Telegram / voice push</text>
+  <text x="782" y="534" font-size="12" fill="#2c4a5e">decision-class events out &#8226; webhook&#8594;NATS, never polling (R8)</text>
+
+  <!-- ============ FORWARD ARROWS (1-4) ============ -->
+  <g stroke="#2f6db0" stroke-width="2.2" fill="none">
+    <path d="M340,392 L466,372" marker-end="url(#fwd)"/>
+    <path d="M650,330 C700,300 720,210 756,176" marker-end="url(#fwd)"/>
+    <path d="M650,352 C700,330 720,290 756,272" marker-end="url(#fwd)"/>
+    <path d="M650,395 C700,398 720,398 756,398" marker-end="url(#fwd)"/>
+  </g>
+  <g font-size="11.5" font-weight="700" fill="#2f6db0">
+    <text x="356" y="372">1 events out</text>
+    <text x="664" y="244">2 write memory</text>
+    <text x="664" y="300">3 render</text>
+    <text x="664" y="388">4 permission EVENT</text>
+  </g>
+
+  <!-- ============ TELEGRAM hand-off (8) ============ -->
+  <path d="M995,460 L995,476" stroke="#c0453f" stroke-width="2.2" fill="none" marker-end="url(#fall)"/>
+  <text x="1005" y="473" font-size="11.5" font-weight="700" fill="#a23932">8 needs-EM</text>
+
+  <!-- ============ RETURN BAND (bottom): resolution + context-injection + recall ============ -->
+  <!-- 5 resolution: consumer -> NATS -->
+  <path d="M760,440 C660,470 600,470 565,452" stroke="#d98e00" stroke-width="2.2" fill="none" marker-end="url(#ret)"/>
+  <text x="600" y="492" text-anchor="middle" font-size="11.5" font-weight="700" fill="#b07700">5 resolution &#8594; unblock</text>
+
+  <!-- 6 + 7 return-to-pane band -->
+  <path d="M995,206 C995,640 995,690 360,690 L222,690 L222,556" stroke="#d98e00" stroke-width="2.4" fill="none" marker-end="url(#ret)"/>
+  <text x="610" y="681" text-anchor="middle" font-size="12" font-weight="700" fill="#b07700">6 context-injection (UserPromptSubmit additionalContext, R4)  &#183;  7 CCH recall &#8594; the pane&#39;s next turn</text>
+  <!-- short stub from NATS into the same band to show injection also rides NATS -->
+  <path d="M540,450 C540,560 560,640 760,664" stroke="#d98e00" stroke-width="1.6" fill="none" stroke-dasharray="2,4"/>
+
+  <!-- ============ DRIVE-LOOP (9) green self-loop on the pane ============ -->
+  <path d="M70,470 C18,470 18,250 70,202" stroke="#3f8f4f" stroke-width="2.4" fill="none" marker-end="url(#loop)"/>
+  <text x="30" y="640" font-size="12" font-weight="700" fill="#2c6b3a" transform="rotate(-90 30 640)">9 Stop-hook drive-loop: continue the pane, NO keystroke (R7) &#8212; idle is eliminated here</text>
+
+  <!-- ============ KEYSTROKE-WAKE fallback (gray dashed) ============ -->
+  <path d="M205,96 L205,164" stroke="#8a8f98" stroke-width="2" fill="none" stroke-dasharray="6,5" marker-end="url(#fall)"/>
+  <text x="218" y="112" font-size="11.5" fill="#6b7178">keystroke-wake (tom-wake) = cold-start fallback ONLY</text>
+
+  <!-- ============ LEGEND ============ -->
+  <rect x="40" y="724" width="1190" height="120" rx="10" fill="#fafbfc" stroke="#d3d9e0" stroke-width="1.2"/>
+  <text x="58" y="748" font-size="13" font-weight="700" fill="#1d2733">How to read it</text>
+  <g font-size="12" fill="#39424d">
+    <line x1="58" y1="766" x2="92" y2="766" stroke="#2f6db0" stroke-width="2.6" marker-end="url(#fwd)"/>
+    <text x="100" y="770">forward fan-out (1&#8211;4): every hook firing publishes one event; NATS fans it to memory, console, and the escalation consumer.</text>
+    <line x1="58" y1="790" x2="92" y2="790" stroke="#d98e00" stroke-width="2.6" marker-end="url(#ret)"/>
+    <text x="100" y="794">return legs (5&#8211;7): a resolution releases a blocked pane; context-injection + CCH recall enrich the pane&#39;s next turn (data, never a command).</text>
+    <line x1="58" y1="814" x2="92" y2="814" stroke="#3f8f4f" stroke-width="2.6" marker-end="url(#loop)"/>
+    <text x="100" y="818">drive-loop (9): on turn-complete the Stop hook feeds the next queued task back &#8212; no keystroke. The dashed gray leg is the cold-start fallback only.</text>
+  </g>
+</svg>

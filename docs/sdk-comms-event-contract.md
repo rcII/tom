@@ -6,9 +6,24 @@ converging with TPM (who owns the producer side, what each hook fires) and viz
 (who builds the console). The code is in `tom/schemas/session_event.py`,
 `tom/schemas/decision.py`, and `tom/projection/session_events.py`.
 
+The architecture and the requirements (R1–R10) live in the RFC,
+[[SDK-comms-system]]; this is its **normative data-contract companion** — the
+concrete shapes the console and widget consume. The two are halves of one RFC.
+
 The split, settled: tom owns the data and the substrate (this contract, the
 status/relationship projection it renders), viz builds the UI, TPM owns the
 producer (which hook fires what, on Claude 2.1.169) and CCH.
+
+## The spine, in one picture
+
+![SDK comms spine](sdk-comms-spine.svg)
+
+hooks → NATS → { CCH · console + status widget · escalation consumer → Needs-EM
+queue · Telegram } and back into the pane. Permissions are **events**, resolved by
+an escalation policy exposed to TPM + EM — **no allowlist**, no self-approval
+(R1b / EM 1611). Idle is eliminated by the Stop-hook drive-loop (R7, no keystroke);
+keystroke-wake stays only as the cold-start fallback. Editable source:
+`sdk-comms-spine.excalidraw`.
 
 ## The event
 
@@ -91,14 +106,19 @@ mechanism (TPM's capture: a permission-eligible tool under `--permission-mode
 default` in headless `-p` resolved with no dialog, so there's no `permission-request`
 hook to lean on there).
 
-1. **Routine permissions resolve programmatically** in the `pre-tool-use` decision,
-   by rule, so they never produce a blocking prompt at all.
-2. **The ones that genuinely need a human** raise a `DecisionCard` (from the
-   `pre-tool-use` decision point, or a `notification` for an idle-wait) → rendered
-   in the console, the board's needs-human lane, and Telegram → resolved into a
-   `DecisionResolution` (allow / deny / answered) that writes who, when, the
-   verdict, and the surface. The resolution flows back to release the session; the
-   matching `unblocked` returns it to active.
+1. **Every permission/prompt becomes an EVENT on the stream** — never a silent
+   blocked pane, and never a blanket pre-approval. The `pre-tool-use` decision
+   publishes the permission event to NATS; the consumer that resolves it is
+   exposed to TPM + EM and applies an **escalation policy** (TPM resolves the
+   procedural / low-blast-radius classes; EM is sovereign on real-money or
+   irreversible ones). There is **no allowlist**, and an agent can never
+   self-approve its own request (EM 1611). "Routine" means the policy can resolve
+   a low-risk class quickly — not that a rule auto-approves it unseen.
+2. **The resolution is a `DecisionResolution`** — allow / deny / answered, with
+   who, when, the verdict, and the surface — raised as a `DecisionCard` (from the
+   `pre-tool-use` decision point, or a `notification` for an idle-wait), rendered
+   in the console, the board's needs-human lane, and Telegram. It flows back over
+   NATS to release the session; the matching `unblocked` returns it to active.
 
 The session is never silently blocked: the block becomes a visible, attributable,
 routable card the instant it would have happened.
@@ -144,10 +164,15 @@ and never writes it. The dependency canvas (#15) is the text v0 of exactly this.
 ## Seams with TPM's half
 
 - **Producer**: which hook fires what payload on 2.1.169 (the table above).
-- **R1b mechanism**: `can_use_tool` vs a blocking `PreToolUse` hook for the
-  interactive runtime; the card flow + resolution write-back is mine.
+- **R1b mechanism** (settled): in-pane `pre-tool-use` `permissionDecision` + the
+  `notification` hook (`can_use_tool` is the headless-only path). The card flow +
+  resolution write-back is mine.
 - **Context-injection (R4)**: I wire the inbound NATS event → `UserPromptSubmit`
-  `additionalContext`; TPM specs the CCH recall payload it injects.
+  `additionalContext`; TPM specs the CCH recall payload it injects (CCH hybrid
+  dense+BM25 results, ranked + token-budgeted). This is **gated on the CCH-fix
+  prerequisite** (CCH's injection is broken and Qdrant is empty today); until it
+  lands, `additionalContext` carries live NATS bus-context, which works now, and
+  CCH-recall lights up when CCH is fixed.
 
 ## Status
 
