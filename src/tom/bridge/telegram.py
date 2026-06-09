@@ -44,23 +44,32 @@ _UNKNOWN_KIND = "unknown"
 _LEAF_FIELDS = ("text", "data", "date", "message_id")
 
 
-def channel_event_from_update(update: Mapping[str, object], *, ts: str) -> ChannelEvent:
+def channel_event_from_update(update: object, *, ts: str) -> ChannelEvent:
     """Map a raw Telegram Update to a :class:`ChannelEvent`.
 
+    ``update`` is typed ``object`` because it arrives as parsed JSON from an
+    untrusted POST — the static type guarantees nothing, so we narrow at runtime.
     ``ts`` is the producer's receive stamp, passed in so the function stays pure
-    (the Update has no top-level timestamp). Raises if ``update_id`` is missing or
-    non-integer — that isn't a Telegram Update, and a malformed POST must fail
-    loud rather than publish a garbage event.
+    (the Update has no top-level timestamp). Raises if the body isn't a JSON
+    object, or if ``update_id`` is missing or not a plain integer — none of those
+    is a Telegram Update, and a malformed POST must fail loud rather than publish
+    a garbage event.
     """
-    update_id = update.get("update_id")
-    if not isinstance(update_id, int):
+    if not isinstance(update, Mapping):
+        raise ValueError("Telegram update must be a JSON object")
+    fields = _as_str_map(update)
+
+    update_id = fields.get("update_id")
+    # bool is an int subclass, so an `isinstance(..., int)` check alone would let
+    # True/False through as a "valid" id — exclude it explicitly.
+    if not isinstance(update_id, int) or isinstance(update_id, bool):
         raise ValueError("Telegram update is missing an integer update_id")
 
-    kind = _kind_of(update)
+    kind = _kind_of(fields)
     payload = (
-        _salient_payload(_as_str_map(update.get(kind)))
+        _salient_payload(_as_str_map(fields.get(kind)))
         if kind != _UNKNOWN_KIND
-        else {"present_keys": tuple(sorted(k for k in update if k != "update_id"))}
+        else {"present_keys": tuple(sorted(k for k in fields if k != "update_id"))}
     )
     return ChannelEvent(
         event_id=f"telegram-{update_id}",

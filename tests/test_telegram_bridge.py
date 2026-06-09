@@ -81,6 +81,20 @@ def test_noninteger_update_id_fails_loud() -> None:
         channel_event_from_update({"update_id": "4242", "message": {}}, ts=_TS)
 
 
+def test_bool_update_id_fails_loud() -> None:
+    # bool is an int subclass; True must not pass as a valid update_id.
+    with pytest.raises(ValueError, match="update_id"):
+        channel_event_from_update({"update_id": True, "message": {}}, ts=_TS)
+
+
+def test_non_object_body_fails_loud() -> None:
+    # An untrusted POST could carry a JSON array or scalar, not an object.
+    with pytest.raises(ValueError, match="JSON object"):
+        channel_event_from_update([{"update_id": 1}], ts=_TS)
+    with pytest.raises(ValueError, match="JSON object"):
+        channel_event_from_update("not-an-object", ts=_TS)
+
+
 def test_event_id_is_stable_for_the_same_update_id() -> None:
     first = channel_event_from_update(_message_update(), ts=_TS)
     second = channel_event_from_update(_message_update(), ts="2026-06-09T06:00:00Z")
