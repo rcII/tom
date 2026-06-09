@@ -75,11 +75,43 @@ def test_capture_addresses_a_specific_pane_id() -> None:
     assert tmux.calls[0] == ["tmux", "capture-pane", "-p", "-t", "%7"]
 
 
-def test_send_line_sends_literal_text_then_a_separate_carriage_return() -> None:
+def test_send_line_sends_literal_text_then_a_separate_enter() -> None:
     tmux = _FakeTmux()
     TmuxPaneDriver(run=tmux).send_line("%7", "process your inbox")
-    # Two calls, addressed by %id (one pane): literal text, then C-m on its own.
+    # Two calls, addressed by %id (one pane): literal text, then Enter on its own.
     assert tmux.calls == [
         ["tmux", "send-keys", "-t", "%7", "-l", "--", "process your inbox"],
-        ["tmux", "send-keys", "-t", "%7", "C-m"],
+        ["tmux", "send-keys", "-t", "%7", "Enter"],
     ]
+
+
+class _VimInsertComposer:
+    """Models a Claude composer in vim INSERT mode, the way the real panes run.
+
+    ``send-keys -l <text>`` types into the input; the ``Enter`` keyname submits
+    (clears the input and fires a turn); a raw ``C-m`` inserts a newline and does
+    NOT submit — the failure the live wake hit.
+    """
+
+    def __init__(self) -> None:
+        self.input = ""
+        self.turns = 0
+
+    def __call__(self, argv: list[str]) -> str:
+        if "-l" in argv:
+            self.input += argv[-1]
+        elif argv[-1] == "Enter":
+            self.input = ""
+            self.turns += 1
+        elif argv[-1] == "C-m":
+            self.input += "\n"  # newline, not a submit
+        return ""
+
+
+def test_send_line_actually_fires_the_turn() -> None:
+    # Not just "text was sent" — assert the composer submitted: the input box is
+    # empty and a turn started. With C-m this fails (the line would sit unsent).
+    composer = _VimInsertComposer()
+    TmuxPaneDriver(run=composer).send_line("7:1", "you have new messages")
+    assert composer.input == ""
+    assert composer.turns == 1
