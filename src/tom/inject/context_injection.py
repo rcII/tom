@@ -207,8 +207,12 @@ def _recall_lines(chunk: RecallChunk) -> list[str]:
     indented under it: every body entry is a single physical line, visibly part of
     the labelled recall block.
     """
+    # Flatten newlines in the source too, not just the text — a newline in the
+    # source would otherwise split the bulleted first line and leave its tail
+    # unprefixed, escaping the recall block exactly as an unflattened text would.
+    source = " ".join(chunk.source.splitlines())
     physical = chunk.text.splitlines() or [""]
-    return [f"  - [{chunk.source}] {physical[0]}", *(f"    {cont}" for cont in physical[1:])]
+    return [f"  - [{source}] {physical[0]}", *(f"    {cont}" for cont in physical[1:])]
 
 
 def _bus_facts(
