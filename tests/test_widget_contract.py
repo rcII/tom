@@ -147,7 +147,26 @@ def test_delta_adds_and_removes_edges_by_identity() -> None:
         StatusDelta(op=DeltaOp.EDGE_ADD, edge=WidgetEdge("a", "b", EdgeKind.DEPENDS_ON)),
     )
     removed = delta_between(curr, prev).deltas
-    assert removed[0].op is DeltaOp.EDGE_REMOVE
+    assert removed == (
+        StatusDelta(op=DeltaOp.EDGE_REMOVE, edge=WidgetEdge("a", "b", EdgeKind.DEPENDS_ON)),
+    )
+
+
+def test_delta_carries_the_recomputed_derived_answers() -> None:
+    # A status change shifts who's idle; the batch must ship the fresh derived
+    # answers so viz never recomputes the model's query logic itself.
+    prev = snapshot_from_projection(
+        [AgentStatus(session="tom", state=State.ACTIVE)], _graph(), seq=1, generated_ts=_TS
+    )
+    curr = snapshot_from_projection(
+        [AgentStatus(session="tom", state=State.IDLE, idle_basis=IdleBasis.MEASURED)],
+        _graph(),
+        seq=2,
+        generated_ts=_TS,
+    )
+    batch = delta_between(prev, curr)
+    assert batch.derived.idle == ("tom",)
+    assert batch.derived == curr.derived
 
 
 def test_changed_edge_ref_is_a_remove_plus_add_not_a_mutation() -> None:

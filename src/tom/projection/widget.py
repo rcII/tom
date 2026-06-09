@@ -97,7 +97,11 @@ def delta_between(prev: StatusSnapshot, curr: StatusSnapshot) -> DeltaBatch:
             deltas.append(StatusDelta(op=DeltaOp.EDGE_REMOVE, edge=prev_edges[key]))
 
     return DeltaBatch(
-        from_seq=prev.seq, to_seq=curr.seq, ts=curr.generated_ts, deltas=tuple(deltas)
+        from_seq=prev.seq,
+        to_seq=curr.seq,
+        ts=curr.generated_ts,
+        deltas=tuple(deltas),
+        derived=curr.derived,
     )
 
 

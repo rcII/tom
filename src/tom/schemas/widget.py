@@ -111,9 +111,15 @@ class DeltaBatch:
     Applied atomically and in order. If ``from_seq`` is ahead of the seq viz
     holds, it missed a batch and asks for a fresh snapshot; an empty ``deltas``
     with ``to_seq > from_seq`` is a valid no-op advance (nothing changed).
+
+    ``derived`` carries the recomputed query answers as of ``to_seq``. A node or
+    edge change shifts who's idle, who blocks whom, and the critical path, so the
+    batch ships the fresh answers rather than leaving viz to recompute them — viz
+    is render-only and never runs the model's query logic itself (RFC-001 §5.5).
     """
 
     from_seq: int
     to_seq: int
     ts: str
     deltas: tuple[StatusDelta, ...] = ()
+    derived: DerivedAnswers = field(default_factory=DerivedAnswers)
