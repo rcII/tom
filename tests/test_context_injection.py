@@ -173,7 +173,34 @@ def test_budget_truncates_long_content_and_notes_it() -> None:
     rendered = render_additional_context(ctx, budget_chars=200)
     assert "… (context truncated to fit budget)" in rendered
     assert rendered.splitlines()[-1] == "[end live team context]"
-    assert len(rendered) <= 200 + len("… (context truncated to fit budget)") + 1
+    # the note is backtracked into the budget — the result never exceeds it.
+    assert len(rendered) <= 200
+
+
+def test_budget_makes_room_for_the_note_by_backtracking() -> None:
+    # A budget that fits some lines but not all-plus-the-note must drop lines so
+    # the note still fits, never overflow.
+    facts = tuple(f"line-{i}-padding-padding." for i in range(8))
+    ctx = InjectionContext(session="tom", facts=facts, recall=())
+    rendered = render_additional_context(ctx, budget_chars=160)
+    assert len(rendered) <= 160
+    assert rendered.endswith("[end live team context]")
+    assert "truncated" in rendered
+
+
+def test_budget_too_small_for_the_frame_fails_loud() -> None:
+    facts = ("aaaaaaaaaaaaaaaaaaaa.", "bbbbbbbbbbbbbbbbbbbb.")
+    ctx = InjectionContext(session="tom", facts=facts, recall=())
+    with pytest.raises(ValueError, match="too small"):
+        render_additional_context(ctx, budget_chars=80)
+
+
+def test_nonpositive_budget_arg_fails_loud() -> None:
+    ctx = InjectionContext(session="tom", facts=("x.",), recall=())
+    with pytest.raises(ValueError, match="must be positive"):
+        render_additional_context(ctx, budget_chars=0)
+    with pytest.raises(ValueError, match="must be positive"):
+        render_additional_context(ctx, budget_chars=-5)
 
 
 def test_budget_keeps_everything_when_it_fits() -> None:
@@ -197,8 +224,10 @@ def test_nonpositive_budget_env_fails_loud(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_env_budget_is_honoured_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TOM_INJECT_BUDGET_CHARS", "120")
+    # 200 fits the frame + note + a couple of lines, then truncates the rest.
+    monkeypatch.setenv("TOM_INJECT_BUDGET_CHARS", "200")
     facts = tuple(f"You depend on: session-{i}." for i in range(30))
     ctx = InjectionContext(session="tom", facts=facts, recall=())
     rendered = render_additional_context(ctx)
     assert "truncated" in rendered
+    assert len(rendered) <= 200
