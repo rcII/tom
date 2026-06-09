@@ -54,13 +54,13 @@ def snapshot_from_projection(
     edges = tuple(
         sorted(
             (WidgetEdge(e.src, e.dst, e.kind, e.ref) for e in graph.edges),
-            key=_edge_sort_key,
+            key=_edge_key,
         )
     )
-    # who_is_idle wants the same iterable twice; materialize so it isn't consumed.
-    statuses_list = list(by_session.values())
+    # `statuses` was already consumed building `by_session`, so derive idle from
+    # the materialized values rather than re-iterating the (possibly one-shot) arg.
     derived = DerivedAnswers(
-        idle=tuple(status.session for status in who_is_idle(statuses_list)),
+        idle=tuple(status.session for status in who_is_idle(by_session.values())),
         blocks=who_blocks_whom(graph),
         critical_path=critical_path(graph),
     )
@@ -123,11 +123,10 @@ def _widget_node(
     )
 
 
-def _edge_sort_key(edge: WidgetEdge) -> tuple[str, str, str, str]:
-    return (edge.src, edge.dst, edge.kind.value, edge.ref or "")
-
-
 def _edge_key(edge: WidgetEdge) -> tuple[str, str, str, str]:
-    """Edge identity for diffing: an edge is the same edge iff src/dst/kind/ref
-    match, so a changed ``ref`` is a remove + add, never a silent mutation."""
+    """Edge identity — used both to sort edges in a snapshot and to diff them.
+
+    An edge is the same edge iff src/dst/kind/ref match, so a changed ``ref`` is a
+    remove + add, never a silent mutation, and the same key gives a stable sort.
+    """
     return (edge.src, edge.dst, edge.kind.value, edge.ref or "")

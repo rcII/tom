@@ -109,10 +109,17 @@ def test_delta_emits_a_single_upsert_for_a_status_change() -> None:
         generated_ts=_TS,
     )
     batch = delta_between(prev, curr)
-    assert len(batch.deltas) == 1
-    only = batch.deltas[0]
-    assert only.op is DeltaOp.NODE_UPSERT
-    assert only.node is not None and only.node.status is State.BLOCKED
+    assert batch.deltas == (
+        StatusDelta(
+            op=DeltaOp.NODE_UPSERT,
+            node=WidgetNode(
+                id="tom",
+                kind=NodeKind.SESSION,
+                status=State.BLOCKED,
+                current_task="perm",
+            ),
+        ),
+    )
 
 
 def test_delta_handles_added_and_removed_nodes() -> None:
