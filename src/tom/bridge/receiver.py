@@ -53,6 +53,10 @@ def handle_webhook(
         parsed: object = json.loads(body)
     except (json.JSONDecodeError, UnicodeDecodeError):
         return WebhookOutcome(400, None, "bad request: body is not valid JSON")
+    except RecursionError:
+        # Deeply nested JSON (within the body cap) overflows the parser; that's
+        # abusive input, not a transient — 400 so Telegram doesn't retry it.
+        return WebhookOutcome(400, None, "bad request: JSON nested too deeply")
 
     try:
         event = channel_event_from_update(parsed, ts=ts)
