@@ -93,6 +93,16 @@ def test_non_telegram_payload_is_400() -> None:
     assert rec.calls == []
 
 
+def test_deeply_nested_json_is_400_not_a_crash() -> None:
+    # A deeply nested body overflows the JSON parser; it must be a clean 400, not
+    # an uncaught RecursionError that escapes the handler.
+    rec = _Recorder()
+    body = b"[" * 40000 + b"]" * 40000
+    outcome = handle_webhook(body, _SECRET, expected_secret=_SECRET, publisher=rec, ts=_TS)
+    assert outcome.status == 400
+    assert rec.calls == []
+
+
 def test_empty_body_is_400() -> None:
     rec = _Recorder()
     outcome = handle_webhook(b"", _SECRET, expected_secret=_SECRET, publisher=rec, ts=_TS)
