@@ -40,7 +40,10 @@ class HookKind(StrEnum):
     NOTIFICATION = "notification"
     STOP = "stop"
     SESSION_END = "session-end"
-    #: A tool/permission that needs a human decision — the R1b silent-block case.
+    #: The runtime's decision-needed marker for R1b, raised when a `pre-tool-use`
+    #: decision needs a human (it reads as blocked + raises a card). Not a raw
+    #: 2.1.169 hook — on 2.1.169 R1b rides `pre-tool-use` permissionDecision +
+    #: `notification`; this is the synthetic event the runtime emits to mark it.
     PERMISSION_REQUEST = "permission-request"
 
 

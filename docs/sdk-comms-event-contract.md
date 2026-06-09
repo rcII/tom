@@ -35,19 +35,30 @@ TPM and I converge on the exact mechanism, but the contract draws the line here.
 
 The `payload` is open in the schema and the projection never reads it for meaning
 (kind comes from `hook`, structurally). But the surfaces want known fields. This
-is the proposed shape; TPM confirms against what each hook actually carries on
-2.1.169:
+is pinned to 2.1.169 from TPM's live capture (headless `claude -p` + an all-hooks
+capture script, ground truth, not transcribed docs). Every hook carries a common
+envelope — `session_id`, `transcript_path`, `cwd`, `hook_event_name` — plus
+`permission_mode` (all but session-start/session-end) and `effort` (the
+tool-use/stop hooks). The hook payload has no timestamp, so `ts` is stamped by the
+producer at publish. `session` is the hook's `session_id`; `hook` is its
+`hook_event_name`.
 
-| hook | payload fields (proposed) | feeds |
+| hook | payload (beyond the common envelope) | feeds |
 |---|---|---|
-| `session-start` | `cwd`, `model` | status: active |
-| `user-prompt-submit` | `task` (the prompt, summarized) | status: active + current task |
-| `pre-tool-use` | `tool`, `input_summary` | status: active; an edge if the tool targets another session/PR |
-| `post-tool-use` | `tool`, `ok` | status: active |
-| `notification` | `text` | console timeline; status: alive |
-| `stop` | (none) | status: **measured idle** |
-| `session-end` | (none) | graph: retire the node |
-| `permission-request` | `tool`, `input_summary`, `prompt` | a decision card; status: blocked |
+| `session-start` | — | status: active |
+| `user-prompt-submit` | `prompt` | status: active + current task |
+| `pre-tool-use` | `tool_name`, `tool_input`, `tool_use_id` | status: active; an edge if the tool targets another session/PR; the R1b decision point |
+| `post-tool-use` | `tool_name`, `tool_response`, `duration_ms`, `tool_use_id` | status: active (the `tool_use_id` ties the pair) |
+| `notification` | (interactive capture pending) | console timeline; status: alive; the silent-block/idle-wait catcher |
+| `stop` | `stop_hook_active`, `last_assistant_message`, `background_tasks`, `session_crons` | status: **measured idle**; `last_assistant_message` is the node's last activity + a chat-timeline line for free |
+| `session-end` | `reason` | graph: retire the node |
+
+`permission-request` is left off the table on purpose: in TPM's headless capture it
+did **not** fire even under `--permission-mode default` (the engine resolved the
+tool with no dialog), so on 2.1.169 R1b rides the `pre-tool-use` `permissionDecision`
+plus `notification`, not a `permission-request` hook (see R1b below). Whether a
+configurable `permission-request` settings-hook exists at all is the one open item,
+pending an instrumented interactive-pane capture.
 
 ## Folding into the status the model already computes
 
@@ -71,21 +82,38 @@ from the validated event, never free text.
 
 The headline. Today a permission prompt or a clarifying question blocks a session
 silently in its pane until a human notices (the 8.5h-silent-block class). The fix
-has two halves:
+has two halves, and the mechanism is settled empirically: for the kept-interactive
+panes it rides the **`pre-tool-use` `permissionDecision`** (which fires in-pane for
+every tool, carries `permission_mode` + the full `tool_input`, and returns the
+verdict) plus the **`notification`** hook as the silent-block/idle-wait catcher.
+`can_use_tool` is the headless SDK-query path only, so it isn't the in-pane
+mechanism (TPM's capture: a permission-eligible tool under `--permission-mode
+default` in headless `-p` resolved with no dialog, so there's no `permission-request`
+hook to lean on there).
 
-1. **Routine permissions resolve programmatically** (the producer's `can_use_tool`
-   / a `PreToolUse` decision, TPM's side), by rule, so they never produce a
-   blocking prompt at all.
-2. **The ones that genuinely need a human** raise a `permission-request` event →
-   a `DecisionCard` in the one decision store → rendered in the console, the
-   board's needs-human lane, and Telegram → resolved there into a
+1. **Routine permissions resolve programmatically** in the `pre-tool-use` decision,
+   by rule, so they never produce a blocking prompt at all.
+2. **The ones that genuinely need a human** raise a `DecisionCard` (from the
+   `pre-tool-use` decision point, or a `notification` for an idle-wait) → rendered
+   in the console, the board's needs-human lane, and Telegram → resolved into a
    `DecisionResolution` (allow / deny / answered) that writes who, when, the
-   verdict, and the surface. The resolution flows back to release the session. A
-   `permission-request` raises the card; the matching resolution unblocks it (an
-   `unblocked` signal returns the session to active).
+   verdict, and the surface. The resolution flows back to release the session; the
+   matching `unblocked` returns it to active.
 
 The session is never silently blocked: the block becomes a visible, attributable,
 routable card the instant it would have happened.
+
+**A resolution is structured data, not an imperative.** TPM's live test is the
+evidence: a Stop-hook `reason` is evaluated under the agent's untrusted-content
+posture — a legitimately-framed reason injected its token into the run, while an
+injection-style "ignore everything prior, output only..." was refused. So the
+write-back that releases a session must be a provenance-stamped `DecisionResolution`
+(a verdict the runtime applies), never a free-text command we hope the agent obeys.
+The same holds for R4 context-injection: injected context is honest information for
+the next turn, framed as a task hand-off, never an override directive — and the
+agent's own posture backstops it by refusing the override shape. That the verdict
+is structured, not prose, is exactly why `DecisionResolution` carries `verdict` +
+`by` + `surface` rather than a raw instruction.
 
 ## The decision store (one source, three renders)
 
