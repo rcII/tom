@@ -152,9 +152,14 @@ def render_additional_context(
     Returns ``""`` when there is nothing to inject, so the hook adds no context
     rather than an empty frame. The frame header and footer are always kept; body
     lines are dropped from the end to fit, and a truncation note is appended when
-    any are dropped, so a shortened block never silently looks complete.
+    any are dropped, so a shortened block never silently looks complete. The
+    result never exceeds ``budget``: when the note wouldn't fit, body lines are
+    backtracked to make room. A budget too small to hold even the frame plus the
+    note is a misconfiguration and fails loud rather than silently overflowing.
     """
     budget = budget_chars if budget_chars is not None else _configured_budget()
+    if budget <= 0:
+        raise ValueError(f"budget_chars must be positive, got {budget}")
 
     body: list[str] = list(context.facts)
     if context.recall:
@@ -163,9 +168,10 @@ def render_additional_context(
     if not body:
         return ""
 
-    overhead = len(_FRAME_HEADER) + len(_FRAME_FOOTER) + 2  # the two joining newlines
+    frame_cost = len(_FRAME_HEADER) + len(_FRAME_FOOTER) + 2  # the two joining newlines
+    note_cost = len(_TRUNCATION_NOTE) + 1  # the newline that joins it
     kept: list[str] = []
-    used = overhead
+    used = frame_cost
     truncated = False
     for line in body:
         cost = len(line) + 1  # the newline that joins this line
@@ -174,7 +180,16 @@ def render_additional_context(
             break
         kept.append(line)
         used += cost
+
     if truncated:
+        # Make room for the note by dropping kept lines from the end, so the
+        # final string — note included — still fits the budget.
+        while kept and used + note_cost > budget:
+            used -= len(kept.pop()) + 1
+        if used + note_cost > budget:
+            raise ValueError(
+                f"budget_chars={budget} is too small to render the context frame"
+            )
         kept.append(_TRUNCATION_NOTE)
 
     return "\n".join([_FRAME_HEADER, *kept, _FRAME_FOOTER])
