@@ -93,6 +93,31 @@ def test_non_telegram_payload_is_400() -> None:
     assert rec.calls == []
 
 
+def test_empty_body_is_400() -> None:
+    rec = _Recorder()
+    outcome = handle_webhook(b"", _SECRET, expected_secret=_SECRET, publisher=rec, ts=_TS)
+    assert outcome.status == 400
+    assert rec.calls == []
+
+
+def test_non_utf8_body_is_400_not_a_crash() -> None:
+    rec = _Recorder()
+    outcome = handle_webhook(
+        b"\xff\xfe\x00garbage", _SECRET, expected_secret=_SECRET, publisher=rec, ts=_TS
+    )
+    assert outcome.status == 400
+    assert rec.calls == []
+
+
+def test_json_array_body_is_400() -> None:
+    # Valid JSON, but not a Telegram update object — must not publish.
+    rec = _Recorder()
+    body = json.dumps([{"update_id": 1}]).encode("utf-8")
+    outcome = handle_webhook(body, _SECRET, expected_secret=_SECRET, publisher=rec, ts=_TS)
+    assert outcome.status == 400
+    assert rec.calls == []
+
+
 def test_publish_failure_is_500_so_telegram_retries() -> None:
     outcome = handle_webhook(
         _message_body(), _SECRET, expected_secret=_SECRET, publisher=_Failing(), ts=_TS
