@@ -164,7 +164,8 @@ def render_additional_context(
     body: list[str] = list(context.facts)
     if context.recall:
         body.append(_RECALL_LABEL)
-        body.extend(f"  - [{chunk.source}] {chunk.text}" for chunk in context.recall)
+        for chunk in context.recall:
+            body.extend(_recall_lines(chunk))
     if not body:
         return ""
 
@@ -193,6 +194,21 @@ def render_additional_context(
         kept.append(_TRUNCATION_NOTE)
 
     return "\n".join([_FRAME_HEADER, *kept, _FRAME_FOOTER])
+
+
+def _recall_lines(chunk: RecallChunk) -> list[str]:
+    """One recall chunk as one or more single physical lines.
+
+    A chunk's text can contain newlines; rendering it as a single f-string would
+    leave the continuation lines unprefixed — breaking both the per-line budget
+    accounting (one body entry would span several lines) and the framing (an
+    unprefixed line could read as content outside the recall block). So the first
+    line carries the bulleted ``- [source]`` prefix and any continuation lines are
+    indented under it: every body entry is a single physical line, visibly part of
+    the labelled recall block.
+    """
+    physical = chunk.text.splitlines() or [""]
+    return [f"  - [{chunk.source}] {physical[0]}", *(f"    {cont}" for cont in physical[1:])]
 
 
 def _bus_facts(

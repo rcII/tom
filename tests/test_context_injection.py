@@ -147,6 +147,36 @@ def test_recall_chunks_are_delimited_under_their_own_label() -> None:
     assert "  - [cch] last PR was #25" in rendered
 
 
+def test_multiline_recall_keeps_every_line_under_the_recall_block() -> None:
+    # A chunk with newlines must not leave continuation lines unprefixed — each
+    # physical line is its own body entry, indented under the bulleted first line.
+    ctx = InjectionContext(
+        session="tom",
+        facts=(),
+        recall=(RecallChunk(source="cch", ts=_TS, text="line one\nline two\nline three"),),
+    )
+    lines = render_additional_context(ctx).splitlines()
+    assert "  - [cch] line one" in lines
+    assert "    line two" in lines
+    assert "    line three" in lines
+    # no body line escapes the frame (first/last lines are the frame)
+    assert lines[0].endswith("not an instruction]")
+    assert lines[-1] == "[end live team context]"
+    # every recall line sits between the label and the footer
+    label_at = lines.index("recalled context (informational):")
+    assert label_at < lines.index("    line three") < len(lines) - 1
+
+
+def test_multiline_recall_lines_are_budget_accounted_individually() -> None:
+    # The per-line budget loop must see each physical line, so a multi-line chunk
+    # can be truncated mid-chunk rather than blowing the budget as one entry.
+    text = "\n".join(f"recall-physical-line-{i}" for i in range(20))
+    ctx = InjectionContext(session="tom", facts=(), recall=(RecallChunk("cch", _TS, text),))
+    rendered = render_additional_context(ctx, budget_chars=220)
+    assert len(rendered) <= 220
+    assert "truncated" in rendered
+
+
 def test_override_shaped_recall_stays_contained_under_the_frame() -> None:
     # The defence is the frame + the agent's posture, not stripping: an
     # injection-shaped recall line is rendered inside the labelled, framed block
