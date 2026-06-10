@@ -1,0 +1,50 @@
+# systemd --user unit for the Telegram webhook->NATS bridge (R8).
+#
+# The bridge holds the Telegram channel via webhook PUSH and republishes each
+# update as a NATS event, so a session consumes the channel from NATS and buffers
+# across reconnects — the channel's liveness is decoupled from any session's, so
+# a transient can't detach it the way a session-child polling plugin gets dropped.
+#
+# Install (only AFTER the bridge stack is merged to main — enable from a main
+# checkout, not an in-review branch, so the daemon never runs mutable code):
+#   git -C ~/code/tom checkout main && git -C ~/code/tom pull
+#   # create the secret env file (NOT in the unit, NOT in git): chmod 600
+#   install -m 600 /dev/null ~/.config/tom/telegram-bridge.env
+#   printf 'TELEGRAM_WEBHOOK_SECRET=%s\n' "$(openssl rand -hex 32)" \
+#     > ~/.config/tom/telegram-bridge.env
+#   cp deploy/tom-telegram-bridge.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now tom-telegram-bridge.service
+#   journalctl --user -u tom-telegram-bridge -f
+#
+# Telegram requires HTTPS: this binds loopback and sits behind a TLS reverse proxy
+# (nginx/caddy) that forwards TOM_BRIDGE_PATH. Register the webhook once with the
+# same secret: setWebhook?url=https://<host><path>&secret_token=<the secret>.
+
+[Unit]
+Description=tom Telegram webhook->NATS bridge
+After=default.target
+# Cap restarts so a crash on bad config can't restart-storm.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+
+# The webhook secret is NOT in this unit (and not in git). It lives in an
+# operator-created, chmod-600 env file as TELEGRAM_WEBHOOK_SECRET=... so the
+# token never lands in a world-readable unit or the repo.
+EnvironmentFile=%h/.config/tom/telegram-bridge.env
+
+# Non-secret listener + bus config (override per host as needed).
+Environment=TOM_BRIDGE_HOST=127.0.0.1
+Environment=TOM_BRIDGE_PORT=8788
+Environment=TOM_BRIDGE_PATH=/telegram/webhook
+Environment=NATS_URL=nats://127.0.0.1:4222
+
+ExecStart=%h/.local/bin/uv run --project %h/code/tom python -m tom.bridge
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
