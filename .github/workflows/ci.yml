@@ -1,0 +1,63 @@
+name: CI
+
+# Runs the same three gates we run by hand — ruff, mypy --strict, pytest — on a
+# self-hosted runner scoped to this repo. Follows the team's self-hosted pattern
+# (per-repo runner on the ubuntu-dev label, per-branch concurrency cancel,
+# minimal permissions). tom is pure Python, so there's no docker/compose
+# detritus to scrub before checkout.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A new push to a branch cancels that branch's in-flight run — stale runs
+# shouldn't hold a runner slot a newer push needs.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  # Pinned so CI resolves dependencies exactly as a developer does locally; a uv
+  # upgrade that changed resolution behaviour would shift the test surface.
+  UV_VERSION: "0.11.7"
+
+jobs:
+  check:
+    name: Lint, type-check, test
+    runs-on: [self-hosted, linux, x64, ubuntu-dev]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        run: pip install "uv==${{ env.UV_VERSION }}"
+
+      - name: Cache the uv venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Sync dependencies
+        run: uv sync --group dev
+
+      - name: ruff
+        run: uv run ruff check .
+
+      - name: mypy --strict
+        run: uv run mypy src tests
+
+      - name: pytest
+        run: uv run pytest -q
